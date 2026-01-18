@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
 import { NeuralProtocol, Ingredient, UserPreferences, AnalysisStep } from '../types';
-import { synthesizeProtocol, generatePlatingVisual, generateDrinkVisual, generateIngredientVisual, generateSchematic, checkOnlineStatus } from '../services/geminiService';
+import { synthesizeProtocol, generatePlatingVisual, generateDrinkVisual, generateIngredientVisual, generateSchematic, checkOnlineStatus, generateVisualBlueprint, VisualBlueprint } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ShoppingCart, Wine, ChevronRight, LayoutTemplate, Sparkles, Check, Zap, ZapOff, Layers, Loader2, Droplets, Leaf, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Wine, ChevronRight, LayoutTemplate, Sparkles, Check, Zap, ZapOff, Layers, Loader2, Droplets, Leaf, AlertTriangle, Eye } from 'lucide-react';
 import { ERROR_MESSAGES } from '../constants';
 
 interface SynthesisProps {
@@ -41,6 +41,7 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
   const [visualUrl, setVisualUrl] = useState<string | null>(null);
   const [drinkUrl, setDrinkUrl] = useState<string | null>(null);
   const [schematicUrl, setSchematicUrl] = useState<string | null>(null);
+  const [visualBlueprint, setVisualBlueprint] = useState<VisualBlueprint | null>(null);
   const [progress, setProgress] = useState(0);
   const [statusLog, setStatusLog] = useState("Initializing Core...");
   const [steps, setSteps] = useState<AnalysisStep[]>(SYNTHESIS_STEPS);
@@ -82,20 +83,45 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
       updateStep('plating', 'active');
       setProgress(40);
 
-      const v = await generatePlatingVisual(generatedProtocol);
-      setVisualUrl(v);
+      // Non-blocking image generation with fallback
+      setStatusLog("Generating Visual Assets...");
+      try {
+        const v = await generatePlatingVisual(generatedProtocol);
+        if (v) {
+          setVisualUrl(v);
+        } else {
+          // Fallback to visual blueprint
+          console.log('[Synthesis] Image generation returned empty, requesting visual blueprint...');
+          const blueprint = await generateVisualBlueprint(generatedProtocol.title, generatedProtocol.description);
+          setVisualBlueprint(blueprint);
+        }
+      } catch (imgErr) {
+        console.warn('[Synthesis] Plating visual failed, using blueprint fallback:', imgErr);
+        const blueprint = await generateVisualBlueprint(generatedProtocol.title, generatedProtocol.description);
+        setVisualBlueprint(blueprint);
+      }
       updateStep('plating', 'complete');
       updateStep('sommelier', 'active');
       setProgress(60);
 
-      const d = await generateDrinkVisual(generatedProtocol.drinkPairing.name);
-      setDrinkUrl(d);
+      // Non-blocking drink visual generation
+      try {
+        const d = await generateDrinkVisual(generatedProtocol.drinkPairing.name);
+        setDrinkUrl(d);
+      } catch (drinkErr) {
+        console.warn('[Synthesis] Drink visual failed, continuing without image:', drinkErr);
+      }
       updateStep('sommelier', 'complete');
       updateStep('blueprint', 'active');
       setProgress(80);
 
-      const s = await generateSchematic(generatedProtocol);
-      setSchematicUrl(s);
+      // Non-blocking schematic generation
+      try {
+        const s = await generateSchematic(generatedProtocol);
+        setSchematicUrl(s);
+      } catch (schematicErr) {
+        console.warn('[Synthesis] Schematic failed, continuing without image:', schematicErr);
+      }
       updateStep('blueprint', 'complete');
       updateStep('procurement', 'complete');
 
@@ -246,7 +272,42 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           <div className="lg:col-span-7 space-y-10">
             <div className="relative aspect-video rounded-[3rem] overflow-hidden shadow-2xl bg-white border border-black/[0.015] flex items-center justify-center">
-               {visualUrl ? <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={visualUrl} className="w-full h-full object-cover" /> : <div className="flex flex-col items-center opacity-5"><LayoutTemplate size={48} strokeWidth={0.5} /></div>}
+               {visualUrl ? (
+                 <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={visualUrl} alt={protocol.title} className="w-full h-full object-cover" />
+               ) : visualBlueprint ? (
+                 <motion.div 
+                   initial={{ opacity: 0 }} 
+                   animate={{ opacity: 1 }} 
+                   className="w-full h-full p-12 flex flex-col justify-center gap-6 bg-gradient-to-br from-black/[0.015] to-transparent"
+                 >
+                   <div className="flex items-center gap-3 mb-4">
+                     <Eye size={16} className="text-[#C5A028]" />
+                     <h3 className="text-[9px] uppercase tracking-[0.3em] font-bold text-black/40">Visual Blueprint</h3>
+                   </div>
+                   <div className="space-y-4">
+                     <div>
+                       <h4 className="text-[7px] uppercase tracking-[0.2em] font-bold text-[#C5A028] mb-1">Plating</h4>
+                       <p className="text-sm text-black/60 leading-relaxed">{visualBlueprint.plating}</p>
+                     </div>
+                     <div>
+                       <h4 className="text-[7px] uppercase tracking-[0.2em] font-bold text-[#C5A028] mb-1">Colors</h4>
+                       <p className="text-sm text-black/60 leading-relaxed">{visualBlueprint.colors}</p>
+                     </div>
+                     <div>
+                       <h4 className="text-[7px] uppercase tracking-[0.2em] font-bold text-[#C5A028] mb-1">Textures</h4>
+                       <p className="text-sm text-black/60 leading-relaxed">{visualBlueprint.textures}</p>
+                     </div>
+                     <div>
+                       <h4 className="text-[7px] uppercase tracking-[0.2em] font-bold text-[#C5A028] mb-1">Composition</h4>
+                       <p className="text-sm text-black/60 leading-relaxed">{visualBlueprint.composition}</p>
+                     </div>
+                   </div>
+                 </motion.div>
+               ) : (
+                 <div className="flex flex-col items-center opacity-5">
+                   <LayoutTemplate size={48} strokeWidth={0.5} />
+                 </div>
+               )}
             </div>
 
             <div className="grid grid-cols-3 gap-6">
@@ -280,7 +341,7 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
             <div className="space-y-6">
               <div className="glass-premium p-8 rounded-[2.5rem] flex items-center gap-6 border-black/[0.015]">
                  <div className="w-16 h-16 bg-black/[0.02] rounded-2xl overflow-hidden flex-shrink-0 border border-black/[0.015]">
-                    {drinkUrl ? <img src={drinkUrl} className="w-full h-full object-cover grayscale opacity-40" /> : <div className="w-full h-full flex items-center justify-center"><Wine size={20} className="text-black/10" /></div>}
+                    {drinkUrl ? <img src={drinkUrl} alt={protocol.drinkPairing.name} className="w-full h-full object-cover grayscale opacity-40" /> : <div className="w-full h-full flex items-center justify-center"><Wine size={20} className="text-black/10" /></div>}
                  </div>
                  <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -293,7 +354,7 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
               </div>
 
               <div className="relative aspect-square rounded-[2.5rem] overflow-hidden shadow-lg bg-white border border-black/[0.015] flex items-center justify-center p-8">
-                 {schematicUrl ? <img src={schematicUrl} className="w-full h-full object-contain opacity-30 mix-blend-multiply" /> : <LayoutTemplate size={32} className="text-black/5" />}
+                 {schematicUrl ? <img src={schematicUrl} alt={`${protocol.title} schematic`} className="w-full h-full object-contain opacity-30 mix-blend-multiply" /> : <LayoutTemplate size={32} className="text-black/5" />}
               </div>
             </div>
           </div>

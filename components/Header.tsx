@@ -14,16 +14,42 @@ const Header: React.FC<HeaderProps> = ({ viewState, onOpenSettings }) => {
   const [isOnline, setIsOnline] = useState(checkOnlineStatus());
 
   useEffect(() => {
-    const handleStatus = () => setIsOnline(checkOnlineStatus());
-    window.addEventListener('online', handleStatus);
-    window.addEventListener('offline', handleStatus);
+    const handleStatus = () => {
+      const newStatus = checkOnlineStatus();
+      if (newStatus !== isOnline) {
+        // Log system mode changes for debugging
+        if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
+          console.warn('UI MODE INDICATOR CHANGE', {
+            source: 'Header',
+            previousState: isOnline ? 'ONLINE' : 'OFFLINE',
+            newState: newStatus ? 'ONLINE' : 'OFFLINE',
+            trigger: 'Status check interval or browser event'
+          });
+        }
+      }
+      setIsOnline(newStatus);
+    };
+    
+    // Log browser-level network events
+    const handleBrowserOnline = () => {
+      console.log('[Network Event] Browser detected online');
+      handleStatus();
+    };
+    
+    const handleBrowserOffline = () => {
+      console.warn('[Network Event] Browser detected offline');
+      handleStatus();
+    };
+    
+    window.addEventListener('online', handleBrowserOnline);
+    window.addEventListener('offline', handleBrowserOffline);
     const interval = setInterval(handleStatus, 5000); // Proactive poll
     return () => {
-      window.removeEventListener('online', handleStatus);
-      window.removeEventListener('offline', handleStatus);
+      window.removeEventListener('online', handleBrowserOnline);
+      window.removeEventListener('offline', handleBrowserOffline);
       clearInterval(interval);
     };
-  }, []);
+  }, [isOnline]);
 
   const steps = [
     { label: 'Inventory', state: ViewState.DASHBOARD },
