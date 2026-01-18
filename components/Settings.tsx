@@ -4,6 +4,7 @@ import { UserPreferences } from '../types';
 import { validateApiKey } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShieldAlert, X, Loader2, Save, Trash2, Globe2, AlertCircle, Key, CheckCircle } from 'lucide-react';
+import { STORAGE_KEYS, ERROR_MESSAGES } from '../constants';
 
 interface SettingsProps {
   preferences: UserPreferences;
@@ -24,7 +25,7 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
 
   // Load API key status on mount
   useEffect(() => {
-    const storedKey = localStorage.getItem('culinary_lens_gemini_key');
+    const storedKey = localStorage.getItem(STORAGE_KEYS.GEMINI_API_KEY);
     setApiKeyConfigured(!!storedKey || !!import.meta.env.VITE_GEMINI_API_KEY);
   }, []);
 
@@ -46,7 +47,7 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
     }
 
     // Save to localStorage
-    localStorage.setItem('culinary_lens_gemini_key', apiKey.trim());
+    localStorage.setItem(STORAGE_KEYS.GEMINI_API_KEY, apiKey.trim());
     setApiKeyConfigured(true);
     setApiKeyStatus('success');
     setApiKey(''); // Clear input for security
@@ -61,7 +62,7 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
     // Validate connection health
     const isValid = await validateApiKey();
     if (!isValid) {
-      setErrorMessage('Neural link handshake failed. Please configure your Gemini API key.');
+      setErrorMessage(`Neural link handshake failed. Please configure your ${ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}.`);
       setIsSaving(false);
       return;
     }

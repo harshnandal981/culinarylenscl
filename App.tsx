@@ -8,13 +8,14 @@ import Synthesis from './components/Synthesis';
 import ExecutionMode from './components/ExecutionMode';
 import Settings from './components/Settings';
 import Header from './components/Header';
+import { STORAGE_KEYS } from './constants';
 
 const App: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LANDING);
   const [inventory, setInventory] = useState<Ingredient[]>([]);
   const [currentProtocol, setCurrentProtocol] = useState<NeuralProtocol | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences>(() => {
-    const saved = localStorage.getItem('culinary_lens_prefs');
+    const saved = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
     return saved ? JSON.parse(saved) : {
       dietary: 'None',
       allergies: [],
@@ -25,7 +26,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('culinary_lens_prefs', JSON.stringify(preferences));
+    localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(preferences));
   }, [preferences]);
 
   const handleStart = () => setViewState(ViewState.UPLOAD);

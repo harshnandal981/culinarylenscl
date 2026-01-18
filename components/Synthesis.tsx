@@ -4,6 +4,7 @@ import { NeuralProtocol, Ingredient, UserPreferences, AnalysisStep } from '../ty
 import { synthesizeProtocol, generatePlatingVisual, generateDrinkVisual, generateIngredientVisual, generateSchematic, checkOnlineStatus } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ShoppingCart, Wine, ChevronRight, LayoutTemplate, Sparkles, Check, Zap, ZapOff, Layers, Loader2, Droplets, Leaf, AlertTriangle } from 'lucide-react';
+import { ERROR_MESSAGES } from '../constants';
 
 interface SynthesisProps {
   inventory: Ingredient[];
@@ -53,7 +54,7 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
   const handleStartSynthesis = async () => {
     // Check if inventory has items
     if (localInventory.length === 0) {
-      setErrorMessage('Analyze an image first to detect ingredients.');
+      setErrorMessage(`${ERROR_MESSAGES.ANALYZE_IMAGE_FIRST} to detect ingredients.`);
       return;
     }
 
@@ -102,11 +103,11 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
       onProtocolReady(generatedProtocol);
       setTimeout(() => setPhase('RESULTS'), 800);
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      if (errorMsg.includes('not configured')) {
-        setErrorMessage('Gemini API key not configured. Please add your API key in Settings.');
+      const errorMsg = err instanceof Error ? err.message : '';
+      if (errorMsg.includes(ERROR_MESSAGES.API_KEY_NOT_CONFIGURED)) {
+        setErrorMessage(`${ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}. Please add your API key in Settings.`);
       } else {
-        setErrorMessage('AI synthesis failed, please retry.');
+        setErrorMessage(ERROR_MESSAGES.AI_SYNTHESIS_FAILED);
       }
       setPhase('CALIBRATION');
     }
@@ -182,7 +183,7 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
               {!isOnline && (
                 <div className="p-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 text-[10px] font-bold flex items-center gap-3">
                   <AlertTriangle size={14} />
-                  <span>Gemini API key not configured. Please add your API key in Settings.</span>
+                  <span>{ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}. Please add your API key in Settings.</span>
                 </div>
               )}
             </div>

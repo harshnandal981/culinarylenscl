@@ -1,5 +1,6 @@
 
 import { Ingredient, NeuralProtocol } from '../types';
+import { STORAGE_KEYS } from '../constants';
 
 /**
  * Computes a Composite Confidence Score (CCS).
@@ -11,7 +12,7 @@ export const calculateCompositeConfidence = (
   protocol: NeuralProtocol
 ): number => {
   // 1. ML Mean Confidence + Memory Bias
-  const saved = localStorage.getItem('culinary_lens_prefs');
+  const saved = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
   const prefs = saved ? JSON.parse(saved) : {};
   const memory = prefs.confidenceMemory || {};
 

@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/ge
 import { Ingredient, NeuralProtocol, UserPreferences, RecallHypothesis } from "../types";
 import { fuseResults } from "../fusion/pipeline";
 import { synthesizeOfflineProtocol } from "./offlineService";
+import { STORAGE_KEYS, ERROR_MESSAGES } from "../constants";
 
 /**
  * Session-based failover state to prevent repeated failing cloud calls
@@ -46,11 +47,11 @@ export const resolveGeminiApiKey = (): string => {
   if (envKey) return envKey;
   
   // Fall back to localStorage
-  const storedKey = localStorage.getItem("culinary_lens_gemini_key");
+  const storedKey = localStorage.getItem(STORAGE_KEYS.GEMINI_API_KEY);
   if (storedKey) return storedKey;
   
   // No key available
-  throw new Error("Gemini API key not configured. Please add your API key in Settings.");
+  throw new Error(`${ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}. Please add your API key in Settings.`);
 };
 
 /**
