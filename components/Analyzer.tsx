@@ -1,10 +1,11 @@
 
 import React, { useState, useRef } from 'react';
 import { refineManifestWithEnsemble, auditRecall, checkOnlineStatus } from '../services/geminiService';
+import { analyzeFoodImage } from '../services/geminiVision';
 import { run_perception_pipeline, run_targeted_rescan } from '../perception/pipeline';
 import { Ingredient, AnalysisStep } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, ShieldCheck, Cpu, Search, Sparkles, Database, Layers, AlertTriangle, ZapOff } from 'lucide-react';
+import { Camera, ShieldCheck, Cpu, Search, Sparkles, Database, Layers, AlertTriangle, ZapOff, Eye } from 'lucide-react';
 import { registry } from '../services/modelRegistry';
 
 interface AnalyzerProps {
@@ -16,7 +17,8 @@ const INITIAL_STEPS: AnalysisStep[] = [
   { id: 'segment', label: 'Boundary Refinement', status: 'pending' },
   { id: 'audit', label: 'Semantic Recall Audit', status: 'pending' },
   { id: 'rescan', label: 'Targeted Re-scan', status: 'pending' },
-  { id: 'fuse', label: 'Manifest Fusion', status: 'pending' }
+  { id: 'fuse', label: 'Manifest Fusion', status: 'pending' },
+  { id: 'vision', label: 'Vision Analysis', status: 'pending' }
 ];
 
 const Analyzer: React.FC<AnalyzerProps> = ({ onComplete }) => {
@@ -67,9 +69,15 @@ const Analyzer: React.FC<AnalyzerProps> = ({ onComplete }) => {
 
         updateStep('fuse', 'active');
         setStatusText("Consolidating inventory...");
-        setProgress(90);
+        setProgress(85);
         const ensembleIngredients = await refineManifestWithEnsemble(aggregatedManifest);
         updateStep('fuse', 'complete');
+
+        updateStep('vision', 'active');
+        setStatusText("Analyzing culinary composition...");
+        setProgress(95);
+        const visionAnalysis = await analyzeFoodImage(base64);
+        updateStep('vision', 'complete');
 
         setProgress(100);
         setStatusText("Inference Complete.");
@@ -137,7 +145,7 @@ const Analyzer: React.FC<AnalyzerProps> = ({ onComplete }) => {
                   <motion.div className="h-full bg-black" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.8 }} />
                 </div>
 
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-6 gap-3">
                    {steps.map((step) => (
                      <div key={step.id} className="relative flex flex-col items-center text-center">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-all duration-700 ${
@@ -149,6 +157,7 @@ const Analyzer: React.FC<AnalyzerProps> = ({ onComplete }) => {
                            {step.id === 'audit' && <Search size={14} />}
                            {step.id === 'rescan' && <Sparkles size={14} />}
                            {step.id === 'fuse' && <Database size={14} />}
+                           {step.id === 'vision' && <Eye size={14} />}
                         </div>
                         <span className={`text-[7px] uppercase tracking-[0.15em] font-bold leading-tight transition-opacity duration-700 ${step.status === 'active' ? 'opacity-100' : 'opacity-20'}`}>
                            {step.label}

@@ -118,3 +118,12 @@ export interface UserPreferences {
 export interface PerceptionResult {
   ingredients: Ingredient[];
 }
+
+export interface FoodAnalysisResult {
+  ingredients: string[];
+  cuisine: string;
+  cookingStyle: string;
+  freshness: string;
+  visualDescription: string;
+  generatedImage?: string;
+}
