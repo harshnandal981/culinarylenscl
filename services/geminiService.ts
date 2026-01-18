@@ -159,9 +159,14 @@ export const validateApiKey = async (key?: string): Promise<ValidationResult> =>
     return { isValid: hasResponse, isInvalidKey: false, canRetry: false };
   } catch (err: unknown) {
     // Check if error has status code indicating invalid API key
-    const error = err as { status?: number; message?: string };
-    const status = error.status;
-    const message = error.message || String(err);
+    // Use type guard to safely check error properties
+    const status = typeof err === 'object' && err !== null && 'status' in err 
+      ? (err as { status?: number }).status 
+      : undefined;
+    
+    const message = typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message?: unknown }).message)
+      : String(err);
     
     // HTTP 401 (Unauthorized) or 403 (Forbidden) means invalid API key
     const isInvalidKey = status === 401 || status === 403 || 
