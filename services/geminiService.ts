@@ -11,7 +11,22 @@ import { STORAGE_KEYS, ERROR_MESSAGES } from "../constants";
 let sessionForceOffline = false;
 
 /**
+ * Debug telemetry for offline mode transitions
+ */
+const logModeChange = (source: string, reason: string, newState: boolean) => {
+  if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
+    console.warn("SYSTEM MODE CHANGE", {
+      source,
+      reason,
+      newState: newState ? 'OFFLINE' : 'ONLINE',
+      stack: new Error().stack
+    });
+  }
+};
+
+/**
  * Exponential backoff utility for API resilience.
+ * Used for critical operations (NOT image generation).
  */
 const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> => {
   if (sessionForceOffline) throw new Error("SESSION_OFFLINE_FAILOVER");
@@ -26,12 +41,33 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 2000): Pr
     if (isQuotaExceeded) {
       console.warn("[Gemini Handshake] Quota exceeded. Enabling session failover to Edge Compute.");
       sessionForceOffline = true;
+      logModeChange('withRetry', 'Quota exceeded on critical operation', true);
     }
 
     if (isTransient && retries > 0 && !isQuotaExceeded) {
       console.warn(`[Gemini Handshake] Retrying in ${delay}ms... (${retries} attempts left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return withRetry(fn, retries - 1, delay * 2);
+    }
+    throw err;
+  }
+};
+
+/**
+ * Image-specific retry utility that does NOT affect sessionForceOffline.
+ * Image generation failures should be non-authoritative.
+ */
+const withImageRetry = async <T>(fn: () => Promise<T>, retries = 2, delay = 1000): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err: any) {
+    const errorMsg = err?.message || '';
+    const isTransient = errorMsg.includes('500') || errorMsg.includes('fetch') || errorMsg.includes('timeout');
+
+    if (isTransient && retries > 0) {
+      console.warn(`[Image Generation] Retrying in ${delay}ms... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return withImageRetry(fn, retries - 1, delay * 1.5);
     }
     throw err;
   }
@@ -82,6 +118,7 @@ export const checkOnlineStatus = (): boolean => {
  */
 export const resetHandshake = () => {
   sessionForceOffline = false;
+  logModeChange('resetHandshake', 'Manual reset via settings or API key validation', false);
 };
 
 /**
@@ -260,12 +297,13 @@ export const verifyTechnique = async (base64Image: string, instruction: string):
 
 /**
  * Visual Assets Generation (Cloud Only).
+ * Non-authoritative: failures do NOT trigger offline mode.
  */
 export const generatePlatingVisual = async (protocol: NeuralProtocol): Promise<string> => {
   if (!checkOnlineStatus()) return ''; 
   try {
     const ai = getAi();
-    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+    const response = await withImageRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: `A Michelin-star plating of ${protocol.title}. High-fidelity food photography, overhead view, minimalist.`,
       config: { imageConfig: { aspectRatio: '16:9' } }
@@ -275,14 +313,17 @@ export const generatePlatingVisual = async (protocol: NeuralProtocol): Promise<s
     const imgPart = parts.find((p: any) => p?.inlineData?.data);
     const data = imgPart?.inlineData?.data as string | undefined;
     return data ? `data:image/png;base64,${data}` : '';
-  } catch (err) { return ''; }
+  } catch (err) {
+    console.warn('[Image Generation] Plating visual failed:', err);
+    return '';
+  }
 };
 
 export const generateDrinkVisual = async (drinkName: string): Promise<string> => {
   if (!checkOnlineStatus()) return '';
   try {
     const ai = getAi();
-    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+    const response = await withImageRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: `A professional studio photograph of a ${drinkName}. Elegant lighting, plain background.`,
       config: { imageConfig: { aspectRatio: '1:1' } }
@@ -291,14 +332,17 @@ export const generateDrinkVisual = async (drinkName: string): Promise<string> =>
     const imgPart = parts.find((p: any) => p?.inlineData?.data);
     const data = imgPart?.inlineData?.data as string | undefined;
     return data ? `data:image/png;base64,${data}` : '';
-  } catch (err) { return ''; }
+  } catch (err) {
+    console.warn('[Image Generation] Drink visual failed:', err);
+    return '';
+  }
 };
 
 export const generateIngredientVisual = async (ingredientName: string): Promise<string> => {
   if (!checkOnlineStatus()) return '';
   try {
     const ai = getAi();
-    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+    const response = await withImageRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: `A fresh, high-quality ${ingredientName} isolated on a clean white background. Food photography.`,
       config: { imageConfig: { aspectRatio: '1:1' } }
@@ -307,14 +351,17 @@ export const generateIngredientVisual = async (ingredientName: string): Promise<
     const imgPart = parts.find((p: any) => p?.inlineData?.data);
     const data = imgPart?.inlineData?.data as string | undefined;
     return data ? `data:image/png;base64,${data}` : '';
-  } catch (err) { return ''; }
+  } catch (err) {
+    console.warn('[Image Generation] Ingredient visual failed:', err);
+    return '';
+  }
 };
 
 export const generateSchematic = async (protocol: NeuralProtocol): Promise<string> => {
   if (!checkOnlineStatus()) return '';
   try {
     const ai = getAi();
-    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+    const response = await withImageRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: `An architectural blueprint and deconstructed schematic of the dish ${protocol.title}. Technical drawing style.`,
       config: { imageConfig: { aspectRatio: '1:1' } }
@@ -323,7 +370,71 @@ export const generateSchematic = async (protocol: NeuralProtocol): Promise<strin
     const imgPart = parts.find((p: any) => p?.inlineData?.data);
     const data = imgPart?.inlineData?.data as string | undefined;
     return data ? `data:image/png;base64,${data}` : '';
-  } catch (err) { return ''; }
+  } catch (err) {
+    console.warn('[Image Generation] Schematic failed:', err);
+    return '';
+  }
+};
+
+/**
+ * Visual Blueprint Generation - Fallback for failed image generation.
+ * Returns high-fidelity text description of the dish for rendering.
+ */
+export interface VisualBlueprint {
+  plating: string;
+  colors: string;
+  textures: string;
+  garnish: string;
+  lighting: string;
+  composition: string;
+}
+
+export const generateVisualBlueprint = async (dishName: string, description: string): Promise<VisualBlueprint | null> => {
+  if (!checkOnlineStatus()) {
+    return {
+      plating: "Minimalist composition with deliberate negative space",
+      colors: "Earthy tones with accent highlights",
+      textures: "Contrasting smooth and rough elements",
+      garnish: "Fresh herb sprigs and microgreens",
+      lighting: "Natural diffused overhead lighting",
+      composition: "Asymmetric balance following rule of thirds"
+    };
+  }
+  
+  try {
+    const ai = getAi();
+    const response = await withImageRetry<GenerateContentResponse>(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Describe the visual presentation of "${dishName}" in exquisite detail. ${description}. Return a high-fidelity visual blueprint as JSON with keys: plating, colors, textures, garnish, lighting, composition. Each should be a vivid, specific description.`,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            plating: { type: Type.STRING },
+            colors: { type: Type.STRING },
+            textures: { type: Type.STRING },
+            garnish: { type: Type.STRING },
+            lighting: { type: Type.STRING },
+            composition: { type: Type.STRING }
+          },
+          required: ['plating', 'colors', 'textures', 'garnish', 'lighting', 'composition']
+        }
+      }
+    }));
+    return JSON.parse(response.text || "null");
+  } catch (err) {
+    console.warn('[Visual Blueprint] Generation failed:', err);
+    // Return fallback blueprint
+    return {
+      plating: "Artful arrangement with careful attention to spacing and height variation",
+      colors: "Rich, complementary color palette with visual depth",
+      textures: "Varied surface qualities from glossy sauces to matte garnishes",
+      garnish: "Edible flowers, microgreens, and precise herb placement",
+      lighting: "Studio-quality illumination highlighting key elements",
+      composition: "Balanced asymmetry with focal point emphasis"
+    };
+  }
 };
 
 /**
