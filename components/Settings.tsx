@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserPreferences } from '../types';
 import { validateApiKey } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, ShieldAlert, X, Loader2, Save, Trash2, Globe2, AlertCircle } from 'lucide-react';
+import { User, ShieldAlert, X, Loader2, Save, Trash2, Globe2, AlertCircle, Key, CheckCircle } from 'lucide-react';
+import { STORAGE_KEYS, ERROR_MESSAGES } from '../constants';
 
 interface SettingsProps {
   preferences: UserPreferences;
@@ -18,15 +19,50 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
   const [newAllergy, setNewAllergy] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  // Load API key status on mount
+  useEffect(() => {
+    const storedKey = localStorage.getItem(STORAGE_KEYS.GEMINI_API_KEY);
+    setApiKeyConfigured(!!storedKey || !!import.meta.env.VITE_GEMINI_API_KEY);
+  }, []);
+
+  const handleSaveApiKey = async () => {
+    if (!apiKey.trim()) {
+      setApiKeyStatus('error');
+      return;
+    }
+
+    setApiKeyStatus('saving');
+    
+    // Validate the API key
+    const isValid = await validateApiKey(apiKey.trim());
+    if (!isValid) {
+      setApiKeyStatus('error');
+      setErrorMessage('Invalid API key. Please check and try again.');
+      setTimeout(() => setApiKeyStatus('idle'), 2000);
+      return;
+    }
+
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.GEMINI_API_KEY, apiKey.trim());
+    setApiKeyConfigured(true);
+    setApiKeyStatus('success');
+    setApiKey(''); // Clear input for security
+    setErrorMessage('');
+    setTimeout(() => setApiKeyStatus('idle'), 3000);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
     setErrorMessage('');
     
-    // Validate connection health using environment key
+    // Validate connection health
     const isValid = await validateApiKey();
     if (!isValid) {
-      setErrorMessage('Neural link handshake failed. Verify system configuration.');
+      setErrorMessage(`Neural link handshake failed. Please configure your ${ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}.`);
       setIsSaving(false);
       return;
     }
@@ -113,6 +149,83 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
                   </motion.div>
                 )}
               </AnimatePresence>
+            </section>
+
+            {/* AI Core Configuration Section */}
+            <section className="bg-white p-10 md:p-14 rounded-[3.5rem] border border-black/[0.06] shadow-sm space-y-12">
+              <div className="flex items-center gap-5">
+                <Key size={20} className="text-[#D4AF37]" />
+                <h3 className="text-[11px] uppercase tracking-[0.4em] font-bold text-black/50">AI Core Configuration</h3>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <label className="text-[11px] uppercase tracking-widest font-bold text-black/50 block">
+                    Gemini API Key
+                  </label>
+                  <div className="flex gap-4">
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="Enter your Gemini API key..."
+                      className="flex-1 bg-black/[0.03] border border-black/[0.05] rounded-2xl px-6 py-4 text-sm outline-none focus:border-[#D4AF37] transition-all"
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
+                    />
+                    <button
+                      onClick={handleSaveApiKey}
+                      disabled={apiKeyStatus === 'saving'}
+                      className="px-8 py-4 bg-[#0A0A0B] text-white rounded-2xl flex items-center gap-3 transition-transform active:scale-95 shadow-md font-bold text-sm disabled:opacity-50"
+                    >
+                      {apiKeyStatus === 'saving' ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Save size={16} />
+                      )}
+                      <span>Save</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Messages */}
+                {apiKeyConfigured && apiKeyStatus !== 'success' && (
+                  <div className="flex items-center gap-4 px-6 py-4 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100 text-[12px] font-bold">
+                    <CheckCircle size={16} />
+                    <span>Key configured - AI features enabled</span>
+                  </div>
+                )}
+
+                {apiKeyStatus === 'success' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="flex items-center gap-4 px-6 py-4 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100 text-[12px] font-bold"
+                  >
+                    <CheckCircle size={16} />
+                    <span>API key saved successfully!</span>
+                  </motion.div>
+                )}
+
+                {!apiKeyConfigured && apiKeyStatus !== 'success' && (
+                  <div className="flex items-center gap-4 px-6 py-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 text-[12px] font-bold">
+                    <AlertCircle size={16} />
+                    <span>Gemini API key not configured - AI features disabled</span>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-black/40 leading-relaxed">
+                  Get your free API key from{' '}
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#D4AF37] hover:underline font-bold"
+                  >
+                    Google AI Studio
+                  </a>
+                  . Your key is stored locally and never sent to our servers.
+                </p>
+              </div>
             </section>
           </div>
 

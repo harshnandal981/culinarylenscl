@@ -4,6 +4,7 @@ import { NeuralProtocol, Ingredient, UserPreferences, AnalysisStep } from '../ty
 import { synthesizeProtocol, generatePlatingVisual, generateDrinkVisual, generateIngredientVisual, generateSchematic, checkOnlineStatus } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ShoppingCart, Wine, ChevronRight, LayoutTemplate, Sparkles, Check, Zap, ZapOff, Layers, Loader2, Droplets, Leaf, AlertTriangle } from 'lucide-react';
+import { ERROR_MESSAGES } from '../constants';
 
 interface SynthesisProps {
   inventory: Ingredient[];
@@ -43,6 +44,7 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
   const [progress, setProgress] = useState(0);
   const [statusLog, setStatusLog] = useState("Initializing Core...");
   const [steps, setSteps] = useState<AnalysisStep[]>(SYNTHESIS_STEPS);
+  const [errorMessage, setErrorMessage] = useState('');
   const isOnline = checkOnlineStatus();
 
   const updateStep = (id: string, status: AnalysisStep['status']) => {
@@ -50,10 +52,17 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
   };
 
   const handleStartSynthesis = async () => {
+    // Check if inventory has items
+    if (localInventory.length === 0) {
+      setErrorMessage(`${ERROR_MESSAGES.ANALYZE_IMAGE_FIRST} to detect ingredients.`);
+      return;
+    }
+
     setPhase('PROCESSING');
     setSteps(SYNTHESIS_STEPS);
     setProgress(5);
     setStatusLog("Aligning Molecular Manifest...");
+    setErrorMessage('');
     updateStep('manifest', 'active');
 
     const prefs: UserPreferences = {
@@ -93,7 +102,13 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
       setProgress(100);
       onProtocolReady(generatedProtocol);
       setTimeout(() => setPhase('RESULTS'), 800);
-    } catch (err) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : '';
+      if (errorMsg.includes(ERROR_MESSAGES.API_KEY_NOT_CONFIGURED)) {
+        setErrorMessage(`${ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}. Please add your API key in Settings.`);
+      } else {
+        setErrorMessage(ERROR_MESSAGES.AI_SYNTHESIS_FAILED);
+      }
       setPhase('CALIBRATION');
     }
   };
@@ -148,11 +163,29 @@ const Synthesis: React.FC<SynthesisProps> = ({ inventory, onExecute, onBack, onP
               </div>
 
               <motion.button 
-                disabled={!selectedCuisine} whileHover={!selectedCuisine ? {} : { y: -3 }} onClick={handleStartSynthesis}
-                className={`w-full py-6 rounded-[1.8rem] text-[10px] font-bold transition-all duration-700 uppercase tracking-[0.3em] shadow-xl ${selectedCuisine ? 'bg-[#0A0A0B] text-white' : 'bg-black/5 text-black/10 cursor-not-allowed'}`}
+                disabled={!selectedCuisine || !isOnline} whileHover={(!selectedCuisine || !isOnline) ? {} : { y: -3 }} onClick={handleStartSynthesis}
+                className={`w-full py-6 rounded-[1.8rem] text-[10px] font-bold transition-all duration-700 uppercase tracking-[0.3em] shadow-xl ${(selectedCuisine && isOnline) ? 'bg-[#0A0A0B] text-white' : 'bg-black/5 text-black/10 cursor-not-allowed'}`}
               >
                 Synthesize <ChevronRight size={12} className="inline ml-1" />
               </motion.button>
+
+              {errorMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 bg-rose-50 text-rose-700 rounded-2xl border border-rose-100 text-[10px] font-bold flex items-center gap-3"
+                >
+                  <AlertTriangle size={14} />
+                  <span>{errorMessage}</span>
+                </motion.div>
+              )}
+
+              {!isOnline && (
+                <div className="p-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 text-[10px] font-bold flex items-center gap-3">
+                  <AlertTriangle size={14} />
+                  <span>{ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}. Please add your API key in Settings.</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
