@@ -170,7 +170,7 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
                       onChange={(e) => setApiKey(e.target.value)}
                       placeholder="Enter your Gemini API key..."
                       className="flex-1 bg-black/[0.03] border border-black/[0.05] rounded-2xl px-6 py-4 text-sm outline-none focus:border-[#D4AF37] transition-all"
-                      onKeyPress={(e) => e.key === 'Enter' && handleSaveApiKey()}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
                     />
                     <button
                       onClick={handleSaveApiKey}
