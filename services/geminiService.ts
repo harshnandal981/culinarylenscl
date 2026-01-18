@@ -37,12 +37,28 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 2000): Pr
 };
 
 /**
+ * Resolve Gemini API Key from environment or localStorage.
+ * Priority: VITE_GEMINI_API_KEY (env) -> localStorage -> throw error
+ */
+export const resolveGeminiApiKey = (): string => {
+  // Check environment variable first
+  const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (envKey) return envKey;
+  
+  // Fall back to localStorage
+  const storedKey = localStorage.getItem("culinary_lens_gemini_key");
+  if (storedKey) return storedKey;
+  
+  // No key available
+  throw new Error("Gemini API key not configured. Please add your API key in Settings.");
+};
+
+/**
  * Standardized AI Instance Creator.
- * Always use process.env.API_KEY exclusively.
+ * Uses resolveGeminiApiKey() to get the API key.
  */
 const getAi = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY_NULL");
+  const apiKey = resolveGeminiApiKey();
   return new GoogleGenAI({ apiKey });
 };
 
@@ -52,8 +68,12 @@ const getAi = () => {
  */
 export const checkOnlineStatus = (): boolean => {
   if (sessionForceOffline) return false;
-  const hasKey = !!process.env.API_KEY;
-  return navigator.onLine && hasKey;
+  try {
+    const hasKey = !!resolveGeminiApiKey();
+    return navigator.onLine && hasKey;
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -64,10 +84,16 @@ export const resetHandshake = () => {
 };
 
 /**
- * Gemini Key Validation using environment key.
+ * Gemini Key Validation using environment or stored key.
  */
 export const validateApiKey = async (key?: string): Promise<boolean> => {
-  const apiKeyToTest = key || process.env.API_KEY;
+  const apiKeyToTest = key || (() => {
+    try {
+      return resolveGeminiApiKey();
+    } catch {
+      return undefined;
+    }
+  })();
   if (!apiKeyToTest || !navigator.onLine) return false;
   try {
     const ai = new GoogleGenAI({ apiKey: apiKeyToTest });
