@@ -122,9 +122,19 @@ export const resetHandshake = () => {
 };
 
 /**
- * Gemini Key Validation using environment or stored key.
+ * Result of API key validation
  */
-export const validateApiKey = async (key?: string): Promise<boolean> => {
+export interface ValidationResult {
+  isValid: boolean;
+  isInvalidKey: boolean; // true if HTTP 401/403 (Unauthorized/Forbidden)
+  canRetry: boolean; // true if error might be temporary
+}
+
+/**
+ * Gemini Key Validation using environment or stored key.
+ * Returns detailed validation result to distinguish between invalid key and other errors.
+ */
+export const validateApiKey = async (key?: string): Promise<ValidationResult> => {
   const apiKeyToTest = key || (() => {
     try {
       return resolveGeminiApiKey();
@@ -132,19 +142,42 @@ export const validateApiKey = async (key?: string): Promise<boolean> => {
       return undefined;
     }
   })();
-  if (!apiKeyToTest || !navigator.onLine) return false;
+  
+  if (!apiKeyToTest || !navigator.onLine) {
+    return { isValid: false, isInvalidKey: false, canRetry: true };
+  }
+  
   try {
     const ai = new GoogleGenAI({ apiKey: apiKeyToTest });
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: 'Respond with "ok".',
+      contents: 'ping',
     });
     // Correctly access text property (not a method)
-    const isValid = response.text?.toLowerCase().includes('ok') || false;
-    if (isValid) resetHandshake();
-    return isValid;
-  } catch (err) {
-    return false;
+    const hasResponse = !!response.text;
+    if (hasResponse) resetHandshake();
+    return { isValid: hasResponse, isInvalidKey: false, canRetry: false };
+  } catch (err: unknown) {
+    // Check if error has status code indicating invalid API key
+    // Use type guard to safely check error properties
+    const status = typeof err === 'object' && err !== null && 'status' in err 
+      ? (err as { status?: number }).status 
+      : undefined;
+    
+    const message = typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message?: unknown }).message)
+      : String(err);
+    
+    // HTTP 401 (Unauthorized) or 403 (Forbidden) means invalid API key
+    const isInvalidKey = status === 401 || status === 403 || 
+                        message.toLowerCase().includes('unauthorized') ||
+                        message.toLowerCase().includes('forbidden') ||
+                        message.toLowerCase().includes('api key not valid');
+    
+    // Other errors (network, quota, model, parsing) are retriable
+    const canRetry = !isInvalidKey;
+    
+    return { isValid: false, isInvalidKey, canRetry };
   }
 };
 

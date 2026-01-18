@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserPreferences } from '../types';
-import { validateApiKey } from '../services/geminiService';
+import { validateApiKey, ValidationResult } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, ShieldAlert, X, Loader2, Save, Trash2, Globe2, AlertCircle, Key, CheckCircle } from 'lucide-react';
 import { STORAGE_KEYS, ERROR_MESSAGES } from '../constants';
@@ -37,17 +37,33 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
 
     setApiKeyStatus('saving');
     
-    // Validate the API key
-    const isValid = await validateApiKey(apiKey.trim());
-    if (!isValid) {
-      setApiKeyStatus('error');
-      setErrorMessage('Invalid API key. Please check and try again.');
-      setTimeout(() => setApiKeyStatus('idle'), 2000);
+    // Save to localStorage first
+    localStorage.setItem(STORAGE_KEYS.GEMINI_API_KEY, apiKey.trim());
+    
+    // After saving, validate the API key with a real Gemini call
+    const result: ValidationResult = await validateApiKey(apiKey.trim());
+    
+    if (!result.isValid) {
+      if (result.isInvalidKey) {
+        // HTTP 401/403 - Invalid API key
+        setApiKeyStatus('error');
+        setErrorMessage('Invalid API key. Please check and try again.');
+        setTimeout(() => setApiKeyStatus('idle'), 2000);
+      } else {
+        // Other errors (network, quota, model, parsing) - show generic message
+        setApiKeyConfigured(true);
+        setApiKeyStatus('success');
+        setApiKey(''); // Clear input for security
+        setErrorMessage('Unable to verify key right now, but it has been saved. You can try using the app.');
+        setTimeout(() => {
+          setErrorMessage('');
+          setApiKeyStatus('idle');
+        }, 5000);
+      }
       return;
     }
 
-    // Save to localStorage
-    localStorage.setItem(STORAGE_KEYS.GEMINI_API_KEY, apiKey.trim());
+    // Validation succeeded
     setApiKeyConfigured(true);
     setApiKeyStatus('success');
     setApiKey(''); // Clear input for security
@@ -60,8 +76,8 @@ const Settings: React.FC<SettingsProps> = ({ preferences, onUpdate, onBack }) =>
     setErrorMessage('');
     
     // Validate connection health
-    const isValid = await validateApiKey();
-    if (!isValid) {
+    const result: ValidationResult = await validateApiKey();
+    if (!result.isValid) {
       setErrorMessage(`Neural link handshake failed. Please configure your ${ERROR_MESSAGES.API_KEY_NOT_CONFIGURED}.`);
       setIsSaving(false);
       return;
